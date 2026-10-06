@@ -1,0 +1,29 @@
+{
+  "comment": [
+    "The arena server and the reference bots.",
+    "Kept separate from tsconfig.json so that `npm run build` — the command",
+    "AWS Amplify runs to build the hosted frontend — typechecks exactly what",
+    "it did before the arena was added, and nothing else. Server code cannot",
+    "break the hosted build."
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "types": ["node"],
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["server", "bots"]
+}

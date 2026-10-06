@@ -1,50 +1,49 @@
-import {
-    defineConfig,
-    globalIgnores
-} from "eslint/config";
-
-import globals from "globals";
-
-import {
-    fixupConfigRules,
-} from "@eslint/compat";
-
-import tsParser from "@typescript-eslint/parser";
-import reactRefresh from "eslint-plugin-react-refresh";
 import js from "@eslint/js";
+import globals from "globals";
+import tseslint from "typescript-eslint";
+import reactHooks from "eslint-plugin-react-hooks";
 
-import {
-    FlatCompat,
-} from "@eslint/eslintrc";
+/**
+ * Rules shared by both halves of the project. They have to live inside a
+ * config block that also pulls in the TypeScript plugin — a flat config will
+ * not resolve a plugin's rule from a block that does not register it.
+ */
+const shared = {
+  // An empty catch is how this codebase says "this failure is fine, and the
+  // comment above says why" — around localStorage, for instance.
+  "no-empty": ["error", { allowEmptyCatch: true }],
+  "@typescript-eslint/no-unused-vars": [
+    "error",
+    { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+  ],
+};
 
-const compat = new FlatCompat({
-    baseDirectory: import.meta.dirname,
-    recommendedConfig: js.configs.recommended,
-    allConfig: js.configs.all
-});
+export default tseslint.config(
+  // The Amplify backend is AWS-generated and deploys through `ampx`, not
+  // through anything here. It is left entirely alone, including by the linter.
+  { ignores: ["dist/**", "data/**", "node_modules/**", "amplify/**", ".amplify/**"] },
 
-export default defineConfig([{
-    languageOptions: {
-        globals: {
-            ...globals.browser,
-        },
+  // The server, the bots and the tests run in Node.
+  {
+    files: ["server/**/*.ts", "bots/**/*.ts", "vite.config.ts"],
+    extends: [js.configs.recommended, ...tseslint.configs.recommended],
+    languageOptions: { globals: globals.node },
+    rules: shared,
+  },
 
-        parser: tsParser,
-    },
+  // Tests poke at parsed JSON whose shape is exactly what they are asserting
+  // about. Casting through `any` there is the point, not an oversight.
+  {
+    files: ["**/*.test.ts"],
+    rules: { "@typescript-eslint/no-explicit-any": "off" },
+  },
 
-    extends: fixupConfigRules(compat.extends(
-        "eslint:recommended",
-        "plugin:@typescript-eslint/recommended",
-        "plugin:react-hooks/recommended",
-    )),
-
-    plugins: {
-        "react-refresh": reactRefresh,
-    },
-
-    rules: {
-        "react-refresh/only-export-components": ["warn", {
-            allowConstantExport: true,
-        }],
-    },
-}, globalIgnores(["**/dist"])]);
+  // The spectator view runs in a browser.
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    extends: [js.configs.recommended, ...tseslint.configs.recommended],
+    languageOptions: { globals: globals.browser },
+    plugins: { "react-hooks": reactHooks },
+    rules: { ...reactHooks.configs.recommended.rules, ...shared },
+  },
+);
