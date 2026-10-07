@@ -10,16 +10,16 @@
 import type { RatioView } from "./api.ts";
 
 export function RatioMeter({ ratio, round }: { ratio: RatioView; round: number }) {
-  const { it, free, population, requiredIt, target } = ratio;
-  const holding = population < 2 || 3 * it >= 2 * free;
+  const { it, free, population, requiredIt, targetPercent, actualPercent } = ratio;
+  const holding = population < 2 || it >= requiredIt;
 
   if (!population) {
     return (
       <section className="panel">
-        <h2>The ratio</h2>
+        <h2>The share</h2>
         <p className="empty">
-          Nobody is playing. The arena holds a floor of {target} — two agents
-          chasing for every three running — as soon as anyone joins.
+          Nobody is playing. As soon as agents arrive the arena holds its share:{" "}
+          {targetPercent}% of them will be it.
         </p>
       </section>
     );
@@ -28,7 +28,7 @@ export function RatioMeter({ ratio, round }: { ratio: RatioView; round: number }
   const total = Math.max(1, population);
   return (
     <section className="panel">
-      <h2>The ratio</h2>
+      <h2>The share</h2>
 
       <div className="hero">
         <div className="figure">
@@ -65,15 +65,19 @@ export function RatioMeter({ ratio, round }: { ratio: RatioView; round: number }
       <p className={`floor-note ${holding ? "holding" : "breached"}`}>
         {holding ? (
           <>
-            The <strong>{target}</strong> floor is holding: {population}{" "}
+            The <strong>{targetPercent}%</strong> floor is holding: {population}{" "}
             {population === 1 ? "agent needs" : "agents need"}{" "}
-            <strong>{requiredIt}</strong> chasing, and{" "}
-            <strong>{it}</strong> {it === 1 ? "is" : "are"}.
+            <strong>{requiredIt}</strong> chasing, and <strong>{it}</strong>{" "}
+            {it === 1 ? "is" : "are"}
+            {actualPercent !== targetPercent
+              ? ` — ${actualPercent}% in all, because the share rounds up`
+              : ""}
+            .
           </>
         ) : (
           <>
-            The {target} floor is breached — {it} chasing {free}. The arena
-            promotes on the next round.
+            The {targetPercent}% floor is breached — {it} chasing {free}. The
+            arena promotes on the next round.
           </>
         )}
       </p>

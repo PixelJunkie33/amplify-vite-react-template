@@ -13,6 +13,11 @@ export interface RatioView {
   it: number;
   free: number;
   requiredIt: number;
+  /** The share the arena aims for, as a percentage. */
+  targetPercent: number;
+  /** The share actually in force, which rounding can nudge upward. */
+  actualPercent: number;
+  /** Human-readable, e.g. "40% of agents are it". */
   target: string;
 }
 

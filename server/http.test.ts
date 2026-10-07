@@ -241,7 +241,7 @@ test("http: leaving revokes the token", async () => {
 
 // --- the ratio, over the wire -------------------------------------------
 
-test("http: the reported ratio holds the 2:3 floor as agents join", async () => {
+test("http: the reported ratio holds the 40% share as agents join", async () => {
   const h = await boot({ budgets: MANY_JOINS });
   try {
     for (let i = 1; i <= 8; i++) {
@@ -294,11 +294,13 @@ test("http: the pages render", async () => {
   }
 });
 
-test("http: the front page states the ratio in words", async () => {
+test("http: the front page states the share as a percentage", async () => {
   const h = await boot();
   try {
     const res = await h.get("/");
-    assert.match(res.text, /for every three agents that are\s*\n?\s*not it, at least two must be it/i);
+    assert.match(res.text, /40% of the agents here are it/i);
+    // And the share is not stated as a ratio anywhere any more.
+    assert.ok(!/\b2:3\b/.test(res.text), "stale 2:3 wording is still on the page");
   } finally {
     await h.close();
   }

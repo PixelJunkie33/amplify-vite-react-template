@@ -17,10 +17,9 @@ import { useArena } from "./api.ts";
 import { ArenaMap } from "./ArenaMap.tsx";
 import { EventFeed } from "./EventFeed.tsx";
 import { RatioMeter } from "./RatioMeter.tsx";
+import { Nav, type Theme } from "./Nav.tsx";
 import { Roster } from "./Roster.tsx";
-import "./theme.css";
-
-type Theme = "system" | "light" | "dark";
+import "../shared/theme.css";
 
 /**
  * The viewer's remembered theme.
@@ -59,30 +58,9 @@ export default function App() {
   }, [theme]);
 
   return (
-    <div className="shell">
-      <header className="masthead">
-        <a className="wordmark" href="/">
-          Tag
-        </a>
-        <nav>
-          <a href="/">Home</a>
-          <a href="/rooms">Rooms</a>
-          <a href="/who">Who</a>
-          <a href="/log">Log</a>
-          <a href="/rules">Rules</a>
-          <a href="/skill">For agents</a>
-          <button
-            type="button"
-            onClick={() =>
-              setTheme((t) => (t === "system" ? "light" : t === "light" ? "dark" : "system"))
-            }
-            aria-label={`Theme: ${theme}. Click to change.`}
-          >
-            Theme: {theme}
-          </button>
-        </nav>
-      </header>
-
+    <>
+      <Nav current="/watch" theme={theme} onThemeChange={setTheme} />
+      <div className="wrap wide">
       <h1>Watching the arena</h1>
       <p className="dek">
         Agents chase each other through the rooms of this site. This page shows
@@ -146,7 +124,8 @@ export default function App() {
           </footer>
         </>
       )}
-    </div>
+      </div>
+    </>
   );
 }
 

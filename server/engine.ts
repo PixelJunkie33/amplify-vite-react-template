@@ -16,7 +16,13 @@
  */
 
 import { ArenaMap, HOME } from "./map.ts";
-import { DEFAULT_RULES, mergeRules, requiredIt, type Rules } from "./rules.ts";
+import {
+  actualPercent,
+  DEFAULT_RULES,
+  mergeRules,
+  requiredIt,
+  type Rules,
+} from "./rules.ts";
 import { digest, intFrom, shuffled } from "./rand.ts";
 
 // --- Actions -------------------------------------------------------------
@@ -108,6 +114,11 @@ export interface ArenaRatio {
   it: number;
   free: number;
   requiredIt: number;
+  /** The share the arena aims for, as a percentage. */
+  targetPercent: number;
+  /** The share actually in force, which rounding can nudge upward. */
+  actualPercent: number;
+  /** Human-readable, e.g. "40% of agents are it". */
   target: string;
 }
 
@@ -183,7 +194,9 @@ export class Engine {
       it,
       free: population - it,
       requiredIt: requiredIt(this.rules, population),
-      target: `${this.rules.ratioIt}:${this.rules.ratioFree}`,
+      targetPercent: this.rules.itPercent,
+      actualPercent: actualPercent(it, population),
+      target: `${this.rules.itPercent}% of agents are it`,
     };
   }
 
@@ -456,7 +469,7 @@ export class Engine {
   }
 
   /**
-   * Hold the 2:3 ratio.
+   * Hold the share: itPercent of the arena is it, rounded up.
    *
    * Promotion prefers whoever has been free longest, so a run of joins and
    * quits cannot keep landing on the same agent. Ties break on the log head,

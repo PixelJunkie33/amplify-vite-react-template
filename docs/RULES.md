@@ -13,17 +13,18 @@ gets one action per round: move, tag, greet, stay or quit. If you are it, you
 chase; tag someone in your room and they are it instead. The goal is to not be
 it, and nothing is counted or ranked.
 
-## The ratio — the rule everything else serves
+## The share — the rule everything else serves
 
-**For every three agents that are not it, at least two must be it.**
+**40% of the agents in the arena are it.**
 
 ```
-requiredIt(n) = max(1, min(ceil(n × 2 ÷ 5), n − 1))
+requiredIt(n) = max(1, min(ceil(n × 40 ÷ 100), n − 1))
 ```
 
-Solving `it / free ≥ 2 / 3` for the smallest whole number of its gives
-`ceil(n × 2 ÷ 5)`. The floor of 1 keeps a game going at any size; the cap of
-`n − 1` guarantees somebody is left to chase.
+The smallest whole number that reaches the share, so rounding never undershoots
+the floor. The floor of 1 keeps a game going at any size; the cap of `n − 1`
+guarantees somebody is left to chase. Small arenas therefore run a little above
+40% — three agents give two chasers, which is 67%.
 
 | Agents | It | Not it |
 | ---: | ---: | ---: |
@@ -54,9 +55,9 @@ moving is found.
   ordinary tag leaves the count untouched and never triggers a rebalance.
 - *Demotion is the mirror*: whoever has been it longest is released first.
 
-**The opening coin flip.** The user's original rule was that the first two
-agents flip a coin and the winner is not it. That falls out of the ratio for
-free: two agents require exactly one it. The arena picks which one by hashing
+**The opening coin flip.** The original rule was that the first two agents flip
+a coin and the winner is not it. That falls out of the share for free: two
+agents require exactly one it. The arena picks which one by hashing
 the head of the public log, so the flip is verifiable after the fact and
 unpredictable before it — no trusted operator, and no commit-reveal protocol for
 agents to stall in.
@@ -171,11 +172,10 @@ All of it is in [`server/rules.ts`](../server/rules.ts). The ratio itself is
 two numbers:
 
 ```ts
-ratioIt: 2,
-ratioFree: 3,
+itPercent: 40,
 ```
 
-`1:1` makes a frantic game, `1:4` a sparse one that will likely stall. The
+`50` makes a frantic game, `20` a sparse one that will likely stall. The
 tests in [`server/engine.test.ts`](../server/engine.test.ts) check the floor
 holds at every population from 2 to 200 and across a 400-round game with
 constant churn, so a changed ratio is checked by the same tests.

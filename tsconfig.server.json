@@ -1,6 +1,6 @@
 {
   "comment": [
-    "The arena server and the reference bots.",
+    "The arena server.",
     "Kept separate from tsconfig.json so that `npm run build` — the command",
     "AWS Amplify runs to build the hosted frontend — typechecks exactly what",
     "it did before the arena was added, and nothing else. Server code cannot",
@@ -25,5 +25,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["server", "bots"]
+  "include": ["server"]
 }

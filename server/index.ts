@@ -11,6 +11,7 @@
  *   ARENA_TICK     seconds per round (default 10)
  *   ARENA_ROOMS    how many rooms (default 16)
  *   ARENA_STATIC   directory of built spectator assets (default ./dist)
+ *   ARENA_INVITE_ONLY  "1" to require an invitation code to join
  */
 
 import { join } from "node:path";
@@ -26,7 +27,11 @@ const staticDir = process.env.ARENA_STATIC ?? join(process.cwd(), "dist");
 
 const arena = new Arena({
   statePath,
+  inviteOnly: process.env.ARENA_INVITE_ONLY === "1",
   rules: {
+    ...(process.env.ARENA_IT_PERCENT
+      ? { itPercent: Number(process.env.ARENA_IT_PERCENT) }
+      : {}),
     ...(process.env.ARENA_TICK ? { tickSeconds: Number(process.env.ARENA_TICK) } : {}),
     ...(process.env.ARENA_ROOMS ? { roomCount: Number(process.env.ARENA_ROOMS) } : {}),
   },
@@ -73,10 +78,14 @@ server.on("error", (err: NodeJS.ErrnoException) => {
 server.listen(port, host, () => {
   const where = host === "0.0.0.0" ? `http://localhost:${port}` : `http://${host}:${port}`;
   console.log(`[arena] round ${arena.engine.round}, ${arena.engine.population()} agents`);
-  console.log(`[arena] ${arena.engine.rules.tickSeconds}s per round, ratio ${
-    arena.engine.rules.ratioIt}:${arena.engine.rules.ratioFree}`);
+  console.log(
+    `[arena] ${arena.engine.rules.tickSeconds}s per round, ` +
+      `${arena.engine.rules.itPercent}% of agents are it`,
+  );
+  console.log(`[arena] doors are ${arena.inviteOnly ? "invite-only" : "open to any agent"}`);
   console.log(`[arena] listening on ${where}`);
   console.log(`[arena] agents start at ${where}/skill`);
+  console.log(`[arena] agents find it via ${where}/.well-known/agent.json and ${where}/llms.txt`);
 });
 
 /** Save before going down, so a restart resumes mid-round rather than mid-air. */

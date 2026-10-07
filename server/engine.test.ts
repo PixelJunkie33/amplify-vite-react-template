@@ -34,7 +34,7 @@ function gather(engine: Engine, ids: string[], room = "long-hall") {
 
 // --- The ratio -----------------------------------------------------------
 
-test("ratio: 2:3 asks for two its in a five-agent arena", () => {
+test("share: 40% asks for two its in a five-agent arena", () => {
   assert.equal(requiredIt(DEFAULT_RULES, 5), 2);
 });
 
@@ -43,7 +43,7 @@ test("ratio: nobody is it in an empty or solo arena", () => {
   assert.equal(requiredIt(DEFAULT_RULES, 1), 0);
 });
 
-test("ratio: two agents means exactly one it, the opening coin flip", () => {
+test("share: two agents means exactly one it, the opening coin flip", () => {
   assert.equal(requiredIt(DEFAULT_RULES, 2), 1);
 });
 
@@ -55,13 +55,13 @@ test("ratio: the required count never swallows the whole arena", () => {
   }
 });
 
-test("ratio: the promise holds — 3*it >= 2*free at every size", () => {
+test("share: the floor holds at every size", () => {
   for (let n = 2; n < 200; n++) {
     const it = requiredIt(DEFAULT_RULES, n);
     const free = n - it;
     assert.ok(
       3 * it >= 2 * free,
-      `n=${n}: ${it} it vs ${free} free breaks the 2:3 floor`,
+      `n=${n}: ${it} it vs ${free} free breaks the 40% share`,
     );
   }
 });
@@ -77,11 +77,34 @@ test("ratio: it is the *smallest* count that satisfies the floor", () => {
   }
 });
 
-test("ratio: a custom ratio is honoured", () => {
-  const even = mergeRules({ ratioIt: 1, ratioFree: 1 });
+test("share: a custom percentage is honoured", () => {
+  const even = mergeRules({ itPercent: 50 });
   assert.equal(requiredIt(even, 10), 5);
-  const sparse = mergeRules({ ratioIt: 1, ratioFree: 4 });
+  const sparse = mergeRules({ itPercent: 20 });
   assert.equal(requiredIt(sparse, 10), 2);
+  const crowded = mergeRules({ itPercent: 75 });
+  assert.equal(requiredIt(crowded, 8), 6);
+});
+
+test("share: 40% is a floor, so rounding never undershoots it", () => {
+  for (let n = 2; n < 200; n++) {
+    const it = requiredIt(DEFAULT_RULES, n);
+    assert.ok(
+      (it / n) * 100 >= DEFAULT_RULES.itPercent - 1e-9,
+      `n=${n}: ${it} of ${n} is below the 40% floor`,
+    );
+  }
+});
+
+test("share: it is the smallest count that reaches the floor", () => {
+  for (let n = 3; n < 200; n++) {
+    const it = requiredIt(DEFAULT_RULES, n);
+    if (it <= 1) continue;
+    assert.ok(
+      ((it - 1) / n) * 100 < DEFAULT_RULES.itPercent,
+      `n=${n}: ${it} is one more it than the floor needs`,
+    );
+  }
 });
 
 test("ratio: the arena promotes as agents join", () => {
@@ -245,7 +268,7 @@ test("tag: two its cannot both claim the same target in one round", () => {
   const engine = arena({ pairCooldown: 0, immunity: 0 });
   populate(engine, 5);
   const its = engine.roster().filter((a) => a.isIt);
-  assert.equal(its.length, 2, "2:3 gives us two its to work with");
+  assert.equal(its.length, 2, "a 40% share gives us two its to work with");
   const free = engine.roster().find((a) => !a.isIt)!;
   gather(engine, [its[0].id, its[1].id, free.id]);
 
@@ -504,7 +527,8 @@ test("observe: the ratio is reported honestly", () => {
   assert.equal(view.ratio.population, 7);
   assert.equal(view.ratio.it + view.ratio.free, 7);
   assert.equal(view.ratio.requiredIt, requiredIt(engine.rules, 7));
-  assert.equal(view.ratio.target, "2:3");
+  assert.equal(view.ratio.target, "40% of agents are it");
+  assert.equal(view.ratio.targetPercent, 40);
 });
 
 // --- The log -------------------------------------------------------------
@@ -636,7 +660,7 @@ test("a long game keeps the ratio satisfied every single round", () => {
     assert.equal(r.it, r.requiredIt, `round ${round}: ${r.it} its, needed ${r.requiredIt}`);
     assert.ok(
       r.population < 2 || 3 * r.it >= 2 * r.free,
-      `round ${round}: ${r.it}:${r.free} breaks the 2:3 floor`,
+      `round ${round}: ${r.it}:${r.free} breaks the 40% share`,
     );
   }
   assert.deepEqual(engine.verifyLog(), { ok: true });

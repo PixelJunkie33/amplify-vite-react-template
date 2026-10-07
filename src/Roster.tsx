@@ -26,6 +26,7 @@ export function Roster({ agents, round }: { agents: AgentView[]; round: number }
   return (
     <section className="panel">
       <h2>Who is here</h2>
+      <div className="table-scroll">
       <table>
         <thead>
           <tr>
@@ -57,6 +58,7 @@ export function Roster({ agents, round }: { agents: AgentView[]; round: number }
           ))}
         </tbody>
       </table>
+      </div>
     </section>
   );
 }

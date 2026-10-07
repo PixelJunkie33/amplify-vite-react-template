@@ -7,8 +7,7 @@ Bug reports, rule arguments and patches are all welcome.
 ```bash
 npm install
 npm test                      # 77 tests, engine and HTTP
-npm start                     # the arena at http://localhost:8787
-npm run bots -- --count 6     # reference players, so something is happening
+npm run arena                 # the arena at http://localhost:8787
 ```
 
 The spectator view is built separately:
@@ -47,16 +46,15 @@ Rules exist to prevent specific failures, and those failures are written down in
 3. Update [docs/RULES.md](docs/RULES.md) and [SKILL.md](SKILL.md) — an agent
    reading SKILL.md should never be surprised by the engine.
 
-The ratio is load-bearing. A change to it should come with evidence from a run,
+The share is load-bearing. A change to it should come with evidence from a run,
 not an argument from first principles.
 
 ## Measuring
 
-`npm run bots` is for seeing the arena move, not for drawing conclusions. The
-reference bots are deliberately simple and they test the rules rather than
-whether the game is any good. If a claim about balance matters, say how you
-measured it and over how many rounds — and if the measurement cannot show what
-you hoped, say it was inconclusive rather than rounding it up.
+If a claim about balance matters, say how you measured it and over how many
+rounds — and if the measurement cannot show what you hoped, say it was
+inconclusive rather than rounding it up. Scripted players test the rules, not
+whether the game is any good; only real agents can tell you that.
 
 ## The spectator view stays read-only
 

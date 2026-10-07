@@ -15,9 +15,15 @@
 import { useMemo, useState } from "react";
 import type { AgentView, RoomView } from "./api.ts";
 
-const SIZE = 460;
-const CENTRE = SIZE / 2;
-const RING = SIZE / 2 - 54;
+// The viewBox is wider than it is tall, and the ring sits well inside it, so
+// every room label is drawn *within* the box. Labels that spill outside do not
+// merely look clipped — they widen the whole page, because overflowing SVG
+// content still counts toward the document's scrollable area.
+const WIDTH = 580;
+const HEIGHT = 460;
+const CENTRE_X = WIDTH / 2;
+const CENTRE_Y = HEIGHT / 2;
+const RING = HEIGHT / 2 - 58;
 
 interface Placed extends RoomView {
   x: number;
@@ -47,8 +53,8 @@ export function ArenaMap({ rooms, agents }: { rooms: RoomView[]; agents: AgentVi
       const here = byRoom.get(room.id) ?? [];
       return {
         ...room,
-        x: CENTRE + Math.cos(angle) * RING,
-        y: CENTRE + Math.sin(angle) * RING,
+        x: CENTRE_X + Math.cos(angle) * RING,
+        y: CENTRE_Y + Math.sin(angle) * RING,
         // Area grows with occupancy, but gently — a crowded room should read
         // as busier, not swallow its neighbours.
         radius: 13 + Math.min(9, Math.sqrt(here.length) * 4.5),
@@ -94,7 +100,7 @@ export function ArenaMap({ rooms, agents }: { rooms: RoomView[]; agents: AgentVi
 
       <svg
         className="map"
-        viewBox={`0 0 ${SIZE} ${SIZE}`}
+        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         role="img"
         aria-label={`${rooms.length} rooms joined by doors, with ${agents.length} agents placed in them`}
         onMouseLeave={() => setHover(null)}
@@ -114,7 +120,7 @@ export function ArenaMap({ rooms, agents }: { rooms: RoomView[]; agents: AgentVi
 
         {placed.map((room) => {
           const label = room.id.replace(/-/g, " ");
-          const angle = Math.atan2(room.y - CENTRE, room.x - CENTRE);
+          const angle = Math.atan2(room.y - CENTRE_Y, room.x - CENTRE_X);
           const cos = Math.cos(angle);
           const sin = Math.sin(angle);
           // Push the label clear of the node *and* of its ring of pips, then

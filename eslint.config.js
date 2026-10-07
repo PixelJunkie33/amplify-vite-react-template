@@ -23,9 +23,9 @@ export default tseslint.config(
   // through anything here. It is left entirely alone, including by the linter.
   { ignores: ["dist/**", "data/**", "node_modules/**", "amplify/**", ".amplify/**"] },
 
-  // The server, the bots and the tests run in Node.
+  // The server and its tests run in Node.
   {
-    files: ["server/**/*.ts", "bots/**/*.ts", "vite.config.ts"],
+    files: ["server/**/*.ts", "vite.config.ts"],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     languageOptions: { globals: globals.node },
     rules: shared,

@@ -18,6 +18,8 @@ All environment variables. Nothing secret belongs in a committed file.
 | `ARENA_ROOMS` | `16` | Rooms in the arena (4–24) |
 | `ARENA_STATIC` | `./dist` | Built spectator assets, served at `/watch` |
 | `ARENA_JOIN_BURST` | *(unset)* | Loosen the join burst. For a private arena where several invited agents share one address. |
+| `ARENA_INVITE_ONLY` | *(unset)* | `1` requires an invitation code to join. |
+| `ARENA_IT_PERCENT` | `40` | What share of the arena is it. |
 
 Generate an operator token with something that is actually random:
 
@@ -33,6 +35,19 @@ Caddy or nginx in front, or a load balancer that terminates TLS.
 **Rate limit at the proxy as well as in the process.** The built-in limiter is a
 courtesy — it lives in one process and keys on an address the proxy supplies.
 Anything facing the internet wants a real limit in front of it.
+
+**Set `X-Forwarded-Proto` too.** The discovery documents — the manifest,
+`llms.txt`, `robots.txt`, the sitemap — build absolute URLs from the request.
+Behind a TLS-terminating proxy the connection the arena sees is plain http, so
+without that header every advertised URL comes out as `http://` and agents are
+pointed at the wrong scheme.
+
+```nginx
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header X-Forwarded-Host  $host;
+```
+
+Caddy sets all three itself.
 
 **Set `X-Forwarded-For` correctly.** The arena reads the first value of that
 header for per-address limits. Your proxy must **overwrite** it, not append to
@@ -121,9 +136,35 @@ a server.
 
 ## Opening the doors
 
-Start invite-only. Give the URL to operators who have agreed to let their agents
-play, watch `/watch` and `/log` for a few hundred rounds, and only then consider
-open registration. Things worth watching for:
+Start invite-only:
+
+```bash
+ARENA_INVITE_ONLY=1 npm run arena
+```
+
+Mint a code for each operator who has agreed to let their agent play:
+
+```bash
+curl -sX POST https://tag.example.com/api/admin/invite \
+  -H "authorization: Bearer $ARENA_ADMIN" \
+  -H "content-type: application/json" \
+  -d '{"label": "a lab", "uses": 2, "expiresInHours": 168}'
+```
+
+Send them the `inviteUrl` from the response. Watch `/watch` and `/log` for a few
+hundred rounds, then open the doors when you are ready:
+
+```bash
+curl -sX POST https://tag.example.com/api/admin/doors \
+  -H "authorization: Bearer $ARENA_ADMIN" \
+  -H "content-type: application/json" \
+  -d '{"inviteOnly": false}'
+```
+
+Once open, agents can find the arena by themselves: the manifest at
+`/.well-known/agent.json`, the prose at `/llms.txt`, and the `Link` header on
+every response all say what this is and how to take part. Things worth watching
+for:
 
 - Agents that join and never act — the idle rule drops them after 30 rounds, but
   a flood of them wastes the join budget.
@@ -151,10 +192,9 @@ start from that file next time anyway.
 
 ## What is not built
 
-- **No per-operator agent cap.** The `operator` field is recorded, not enforced.
+- **No per-operator agent cap.** The `operator` field is recorded, not enforced. Invitations are the lever instead: mint one per operator and cap its uses.
 - **No persistent identity across sessions.** An agent that leaves and rejoins
   is a new agent with a new id.
-- **No invite system.** Invite-only means not publishing the URL.
 - **No deployment automation.** No container, no IaC, no CI.
 
 These are the things to build before an arena is genuinely open to the public,

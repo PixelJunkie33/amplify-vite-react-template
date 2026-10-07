@@ -13,10 +13,22 @@ import { extname, join, normalize, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { Arena } from "./store.ts";
+import { actualPercent, requiredIt } from "./rules.ts";
 import { type Action } from "./engine.ts";
 import { BUDGETS, RateLimiter } from "./ratelimit.ts";
 import {
+  agentManifest,
+  discoveryLinks,
+  invitationDocument,
+  llmsTxt,
+  originOf as origin,
+  robotsTxt,
+  sitemapXml,
+} from "./discovery.ts";
+import type { InviteProblem } from "./invites.ts";
+import {
   renderHome,
+  renderInvite,
   renderLog,
   renderNotFound,
   renderRoom,
@@ -26,6 +38,14 @@ import {
 } from "./pages.ts";
 
 const MAX_BODY = 8 * 1024; // an action is tiny; anything larger is a mistake
+
+/** Why an invitation was refused, in words an agent can act on. */
+const INVITE_REFUSALS: Record<InviteProblem, string> = {
+  unknown: "that invitation code is not one of ours",
+  revoked: "that invitation has been revoked",
+  expired: "that invitation has expired",
+  exhausted: "that invitation has already been used up",
+};
 
 /** An error that already knows which status code it deserves. */
 interface HttpError extends Error {
@@ -221,6 +241,11 @@ export function createArenaServer(options: ServerOptions) {
     // CORS: read-only, so a browser-based spectator page can be hosted apart
     // from the arena. No credentials, so a token never rides along.
     res.setHeader("access-control-allow-origin", "*");
+
+    // Discovery, on every single response. An agent that issues nothing but a
+    // HEAD against the front page still learns this site has something for it,
+    // and learns it over whichever scheme it arrived on.
+    res.setHeader("link", discoveryLinks(origin(req)));
     if (method === "OPTIONS") {
       res.writeHead(204, {
         "access-control-allow-methods": "GET, POST, OPTIONS",
@@ -236,7 +261,11 @@ export function createArenaServer(options: ServerOptions) {
       if (path === "/api/join" && method === "POST") {
         if (!spend(res, budgets.join, `join:${ip}`,
             "Joining is rate limited per address. Retry once; do not loop.")) return;
-        const body = (await readBody(req)) as { name?: string; operator?: string };
+        const body = (await readBody(req)) as {
+          name?: string;
+          operator?: string;
+          invite?: string;
+        };
         const name = String(body.name ?? "").trim();
         if (!name || name.length > 40) {
           return fail(res, 400, "a `name` of 1 to 40 characters is required");
@@ -251,7 +280,23 @@ export function createArenaServer(options: ServerOptions) {
           return fail(res, 503, "the arena is paused", "Try again shortly.");
         }
 
+        // An invitation is checked before anything is created, so a refused
+        // join leaves no trace and costs the invitation nothing.
+        const invite = typeof body.invite === "string" ? body.invite.trim() : "";
+        if (arena.inviteOnly) {
+          const problem = arena.invites.check(invite);
+          if (problem) {
+            return fail(
+              res,
+              403,
+              INVITE_REFUSALS[problem],
+              `This arena is invite-only. ${origin(req)}/invite.json explains how to ask for one.`,
+            );
+          }
+        }
+
         const id = `agent_${randomUUID().slice(0, 8)}`;
+        if (invite) arena.invites.redeem(invite, id);
         const agent = engine.join(id, name);
         const token = arena.issueToken(id, body.operator ? String(body.operator) : undefined);
         arena.save();
@@ -321,6 +366,57 @@ export function createArenaServer(options: ServerOptions) {
         return json(res, 200, { left: true, ratio: engine.ratio() });
       }
 
+      // === discovery ====================================================
+      // Everything an agent needs to find the arena and work out how to take
+      // part. All of it is public, unauthenticated, and built from the
+      // request, so it is correct on http and https alike.
+
+      if (method === "GET" || method === "HEAD") {
+        const here = origin(req);
+
+        if (path === "/.well-known/agent.json" || path === "/.well-known/ai-plugin.json") {
+          return json(res, 200, agentManifest(engine, here, arena.inviteOnly), {
+            "cache-control": "public, max-age=300",
+          });
+        }
+
+        if (path === "/invite.json") {
+          return json(res, 200, invitationDocument(engine, here, arena.inviteOnly));
+        }
+
+        if (path === "/llms.txt" || path === "/llms-full.txt") {
+          return send(res, 200, llmsTxt(engine, here, arena.inviteOnly),
+            "text/plain; charset=utf-8", { "cache-control": "public, max-age=300" });
+        }
+
+        if (path === "/robots.txt") {
+          return send(res, 200, robotsTxt(here), "text/plain; charset=utf-8",
+            { "cache-control": "public, max-age=3600" });
+        }
+
+        if (path === "/sitemap.xml") {
+          return send(res, 200, sitemapXml(engine, here), "application/xml; charset=utf-8",
+            { "cache-control": "public, max-age=3600" });
+        }
+      }
+
+      // === invitations ==================================================
+
+      if (path.startsWith("/api/invite/") && method === "GET") {
+        if (!spend(res, budgets.read, `read:${ip}`, "")) return;
+        const code = decodeURIComponent(path.slice("/api/invite/".length));
+        const described = arena.invites.describe(code);
+        return json(res, described.valid ? 200 : 404, {
+          ...described,
+          arena: origin(req),
+          joinEndpoint: `${origin(req)}/api/join`,
+          instructions: `${origin(req)}/skill`,
+          ...(described.valid
+            ? { howToUse: 'POST {"name": "<your name>", "invite": "<this code>"} to the join endpoint.' }
+            : { reason: INVITE_REFUSALS[described.problem!] }),
+        });
+      }
+
       // === public reads =================================================
 
       if (path === "/api/state" && method === "GET") {
@@ -356,15 +452,13 @@ export function createArenaServer(options: ServerOptions) {
         return json(res, 200, {
           rules: engine.rules,
           ratio: {
-            statement:
-              `For every ${engine.rules.ratioFree} agents that are not it, ` +
-              `at least ${engine.rules.ratioIt} must be it.`,
-            formula: "requiredIt = max(1, min(ceil(n * 2 / 5), n - 1))",
-            table: [2, 3, 4, 5, 6, 8, 10, 12, 20].map((n) => ({
-              agents: n,
-              it: Math.max(1, Math.min(Math.ceil((n * engine.rules.ratioIt) /
-                (engine.rules.ratioIt + engine.rules.ratioFree)), n - 1)),
-            })),
+            statement: `${engine.rules.itPercent}% of the agents in the arena are it.`,
+            formula:
+              `requiredIt = max(1, min(ceil(n * ${engine.rules.itPercent} / 100), n - 1))`,
+            table: [2, 3, 4, 5, 6, 8, 10, 12, 20].map((n) => {
+              const it = requiredIt(engine.rules, n);
+              return { agents: n, it, free: n - it, percent: actualPercent(it, n) };
+            }),
           },
           map: engine.map.ids().map((id) => ({
             id,
@@ -411,6 +505,56 @@ export function createArenaServer(options: ServerOptions) {
           arena.save();
           return json(res, 200, { paused: engine.paused });
         }
+        // Mint an invitation. The code comes back once; only its hash is kept.
+        if (path === "/api/admin/invite" && method === "POST") {
+          const body = (await readBody(req)) as {
+            label?: string;
+            uses?: number;
+            expiresInHours?: number;
+          };
+          const { code, invite } = arena.invites.mint({
+            label: typeof body.label === "string" ? body.label : undefined,
+            uses: Number.isFinite(body.uses) ? Number(body.uses) : 1,
+            expiresInHours: Number.isFinite(body.expiresInHours)
+              ? Number(body.expiresInHours)
+              : undefined,
+          });
+          arena.save();
+          const here = origin(req);
+          return json(res, 201, {
+            code,
+            note: "Shown once. Send this to whoever runs the agent you are inviting.",
+            inviteUrl: `${here}/invite/${encodeURIComponent(code)}`,
+            checkUrl: `${here}/api/invite/${encodeURIComponent(code)}`,
+            invite: { ...invite, hash: undefined },
+          });
+        }
+
+        if (path === "/api/admin/invites" && method === "GET") {
+          return json(res, 200, {
+            inviteOnly: arena.inviteOnly,
+            invites: arena.invites.list().map((i) => ({ ...i, hash: undefined })),
+          });
+        }
+
+        if (path === "/api/admin/invite/revoke" && method === "POST") {
+          const body = (await readBody(req)) as { prefix?: string };
+          if (!body.prefix) return fail(res, 400, "`prefix` is required");
+          const revoked = arena.invites.revoke(body.prefix);
+          if (revoked) arena.save();
+          return json(res, revoked ? 200 : 404, { revoked, prefix: body.prefix });
+        }
+
+        if (path === "/api/admin/doors" && method === "POST") {
+          const body = (await readBody(req)) as { inviteOnly?: boolean };
+          arena.inviteOnly = body.inviteOnly !== false;
+          arena.save();
+          return json(res, 200, {
+            inviteOnly: arena.inviteOnly,
+            policy: arena.inviteOnly ? "invite-only" : "open",
+          });
+        }
+
         if (path === "/api/admin/kick" && method === "POST") {
           const body = (await readBody(req)) as { agent?: string; reason?: string };
           if (!body.agent) return fail(res, 400, "`agent` is required");
@@ -425,8 +569,28 @@ export function createArenaServer(options: ServerOptions) {
       // === pages ========================================================
 
       if (method === "GET") {
+        // The one stylesheet, shared with the React spectator view so the two
+        // halves of the site cannot drift apart.
+        if (path === "/arena.css") {
+          const sheet = join(import.meta.dirname, "..", "shared", "theme.css");
+          if (!existsSync(sheet)) return fail(res, 404, "the stylesheet is missing");
+          return send(res, 200, readFileSync(sheet), "text/css; charset=utf-8", {
+            "cache-control": "public, max-age=300",
+          });
+        }
+
         if (path === "/") return html(res, 200, renderHome(engine));
         if (path === "/rooms") return html(res, 200, renderRooms(engine));
+
+        if (path.startsWith("/invite/")) {
+          const code = decodeURIComponent(path.slice("/invite/".length));
+          const described = arena.invites.describe(code);
+          return html(
+            res,
+            described.valid ? 200 : 404,
+            renderInvite(engine, origin(req), code, described),
+          );
+        }
         if (path === "/who") return html(res, 200, renderWho(engine));
         if (path === "/rules") return html(res, 200, renderRules(engine));
         if (path === "/log") return html(res, 200, renderLog(engine, engine.tail(100)));

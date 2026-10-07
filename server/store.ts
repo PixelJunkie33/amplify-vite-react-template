@@ -14,6 +14,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from "
 import { dirname, join } from "node:path";
 
 import { Engine, type EngineSnapshot } from "./engine.ts";
+import { Invites, type Invite } from "./invites.ts";
 import { type Rules } from "./rules.ts";
 
 export interface StoredToken {
@@ -28,6 +29,7 @@ interface StateFile {
   version: 1;
   engine: EngineSnapshot;
   tokens: StoredToken[];
+  invites?: Invite[];
 }
 
 function hashToken(token: string): string {
@@ -36,12 +38,18 @@ function hashToken(token: string): string {
 
 export class Arena {
   engine: Engine;
+  invites = new Invites();
+  /** When true, a valid invitation code is required to join. */
+  inviteOnly: boolean;
   private tokens = new Map<string, StoredToken>();
   private timer: NodeJS.Timeout | null = null;
   private readonly path: string;
 
-  constructor(opts: { statePath?: string; rules?: Partial<Rules> } = {}) {
+  constructor(
+    opts: { statePath?: string; rules?: Partial<Rules>; inviteOnly?: boolean } = {},
+  ) {
     this.path = opts.statePath ?? join(process.cwd(), "data", "arena.json");
+    this.inviteOnly = opts.inviteOnly ?? false;
     const loaded = this.load(opts.rules);
     this.engine = loaded;
   }
@@ -53,6 +61,7 @@ export class Arena {
     try {
       const file = JSON.parse(readFileSync(this.path, "utf8")) as StateFile;
       for (const token of file.tokens ?? []) this.tokens.set(token.hash, token);
+      this.invites = Invites.restore(file.invites ?? []);
       const engine = Engine.restore(file.engine);
       const check = engine.verifyLog();
       if (!check.ok) {
@@ -75,6 +84,7 @@ export class Arena {
       version: 1,
       engine: this.engine.snapshot(),
       tokens: [...this.tokens.values()],
+      invites: this.invites.snapshot(),
     };
     mkdirSync(dirname(this.path), { recursive: true });
     const temp = `${this.path}.tmp`;

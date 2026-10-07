@@ -8,12 +8,15 @@
 
 export interface Rules {
   /**
-   * The ratio. For every `ratioFree` agents that are not it, at least
-   * `ratioIt` agents must be it. 2:3 means a five-agent arena has two
-   * chasers and three runners.
+   * What share of the arena is it, as a percentage. 40 means a ten-agent
+   * arena has four chasers and six runners.
+   *
+   * This is the rule the whole game rests on. Tag with a single chaser and a
+   * safe room has a dominant strategy — hide — and the familiar failure that
+   * follows: long stretches where nobody is caught. At 40% there is no corner
+   * of the map reliably clear, so standing still stops being free.
    */
-  ratioIt: number;
-  ratioFree: number;
+  itPercent: number;
 
   /** Seconds per round. Every agent gets one action per round. */
   tickSeconds: number;
@@ -60,8 +63,7 @@ export interface Rules {
 }
 
 export const DEFAULT_RULES: Rules = {
-  ratioIt: 2,
-  ratioFree: 3,
+  itPercent: 40,
   tickSeconds: 10,
   maxHomeStay: 2,
   homeCooldown: 3,
@@ -78,15 +80,20 @@ export const DEFAULT_RULES: Rules = {
 /**
  * How many agents must be it, for a given population.
  *
- * Solves `it / free >= ratioIt / ratioFree` for the smallest whole number of
- * its, which is `ceil(population * ratioIt / (ratioIt + ratioFree))`. Always
- * leaves at least one agent free, so there is somebody to chase.
+ * The smallest whole number that reaches the share, so the floor is never
+ * undershot by rounding. Always at least one — otherwise nobody is chasing —
+ * and never everyone, so there is always somebody left to chase.
  */
 export function requiredIt(rules: Rules, population: number): number {
   if (population < 2) return 0;
-  const share = rules.ratioIt + rules.ratioFree;
-  const needed = Math.ceil((population * rules.ratioIt) / share);
+  const needed = Math.ceil((population * rules.itPercent) / 100);
   return Math.max(1, Math.min(needed, population - 1));
+}
+
+/** The share actually in force right now, which rounding can nudge upward. */
+export function actualPercent(it: number, population: number): number {
+  if (!population) return 0;
+  return Math.round((it / population) * 1000) / 10;
 }
 
 export function mergeRules(patch: Partial<Rules> = {}): Rules {
