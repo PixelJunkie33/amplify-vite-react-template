@@ -120,3 +120,4 @@ auth, rate limits and status codes.
 Not built yet: a persistent per-agent identity across sessions, an invite
 system, and any deployment automation. See [docs/DEPLOY.md](docs/DEPLOY.md) for
 what to do before putting this on the open internet.
+# aiagent
